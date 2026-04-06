@@ -1,9 +1,9 @@
-from flask import Flask, request, redirect, session, url_for, Response
+from flask import Flask, request, redirect, session, Response
 import pandas as pd
 import os
 
 app = Flask(__name__)
-app.secret_key = "segredo_super_seguro"  # 🔐 importante para sessão
+app.secret_key = "segredo_super_seguro"
 
 ARQUIVO_DADOS = "dados.csv"
 ARQUIVO_USUARIOS = "usuarios.csv"
@@ -21,12 +21,20 @@ def carregar_dados():
     return pd.DataFrame()
 
 # =========================
-# 📥 CARREGAR USUÁRIOS (CORRIGIDO)
+# 📥 CARREGAR USUÁRIOS (ROBUSTO)
 # =========================
 def carregar_usuarios():
     caminho = os.path.join(os.path.dirname(__file__), ARQUIVO_USUARIOS)
     if os.path.exists(caminho):
-        return pd.read_csv(caminho, dtype=str)  # ✅ FORÇA STRING (resolve login)
+        df = pd.read_csv(caminho, dtype=str)
+
+        # 🔥 LIMPA ESPAÇOS (principal causa de erro)
+        df["usuario"] = df["usuario"].str.strip()
+        df["senha"] = df["senha"].str.strip()
+        df["tipo"] = df["tipo"].str.strip()
+
+        return df
+
     return pd.DataFrame()
 
 # =========================
@@ -35,13 +43,13 @@ def carregar_usuarios():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        usuario = request.form.get("usuario").strip()
-        senha = request.form.get("senha").strip()
+        usuario = request.form.get("usuario", "").strip()
+        senha = request.form.get("senha", "").strip()
 
         df = carregar_usuarios()
 
         if df.empty:
-            return "Arquivo de usuários não encontrado"
+            return "Erro: usuários não encontrados"
 
         user = df[(df["usuario"] == usuario) & (df["senha"] == senha)]
 
@@ -122,7 +130,7 @@ def salvar():
     df = carregar_dados()
 
     novo = {
-        "usuario": session["usuario"],  # 🔐 vinculado ao usuário logado
+        "usuario": session["usuario"],
         "nome": request.form.get("nome"),
         "sobrenome": request.form.get("sobrenome"),
         "email": request.form.get("email")
