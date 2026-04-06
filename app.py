@@ -3,7 +3,7 @@ import pandas as pd
 import os
 
 app = Flask(__name__)
-app.secret_key = "segredo_super_seguro"  # 🔐 chave de sessão
+app.secret_key = "segredo_super_seguro"  # 🔐 importante para sessão
 
 ARQUIVO_DADOS = "dados.csv"
 ARQUIVO_USUARIOS = "usuarios.csv"
@@ -21,12 +21,12 @@ def carregar_dados():
     return pd.DataFrame()
 
 # =========================
-# 📥 CARREGAR USUÁRIOS
+# 📥 CARREGAR USUÁRIOS (CORRIGIDO)
 # =========================
 def carregar_usuarios():
     caminho = os.path.join(os.path.dirname(__file__), ARQUIVO_USUARIOS)
     if os.path.exists(caminho):
-        return pd.read_csv(caminho).fillna("")
+        return pd.read_csv(caminho, dtype=str)  # ✅ FORÇA STRING (resolve login)
     return pd.DataFrame()
 
 # =========================
@@ -35,10 +35,13 @@ def carregar_usuarios():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        usuario = request.form.get("usuario")
-        senha = request.form.get("senha")
+        usuario = request.form.get("usuario").strip()
+        senha = request.form.get("senha").strip()
 
         df = carregar_usuarios()
+
+        if df.empty:
+            return "Arquivo de usuários não encontrado"
 
         user = df[(df["usuario"] == usuario) & (df["senha"] == senha)]
 
@@ -47,7 +50,7 @@ def login():
             session["tipo"] = user.iloc[0]["tipo"]
             return redirect("/")
         else:
-            return "<h3>Usuário ou senha inválidos</h3>"
+            return "Usuário ou senha inválidos"
 
     return """
     <h2>Login</h2>
@@ -75,14 +78,12 @@ def usuario_logado():
 # =========================
 # 🏠 TELA PRINCIPAL
 # =========================
-@app.route("/", methods=["GET", "POST"])
+@app.route("/", methods=["GET"])
 def formulario():
-
-    # 🔒 proteção
     if not usuario_logado():
         return redirect("/login")
 
-    busca = request.args.get("busca", "")
+    busca = request.args.get("busca", "").strip()
     df = carregar_dados()
 
     # 🔐 FILTRO POR USUÁRIO
@@ -94,7 +95,7 @@ def formulario():
         df["nome_completo"] = df["nome"] + " " + df["sobrenome"]
         df = df[df["nome_completo"].str.contains(busca, case=False, na=False)]
 
-    tabela = df.to_html(index=False) if not df.empty else "<p>Sem registros</p>"
+    tabela = df.to_html(index=False) if not df.empty else "<p>Sem dados</p>"
 
     return f"""
     <h2>Bem-vindo, {session['usuario']} ({session['tipo']})</h2>
@@ -102,12 +103,11 @@ def formulario():
 
     <h3>Pesquisa</h3>
     <form method="GET">
-        <input name="busca" placeholder="Pesquisar">
+        <input name="busca" placeholder="Pesquisar por nome">
         <button>Buscar</button>
     </form>
 
     <br>
-
     {tabela}
     """
 
@@ -116,7 +116,6 @@ def formulario():
 # =========================
 @app.route("/salvar", methods=["POST"])
 def salvar():
-
     if not usuario_logado():
         return redirect("/login")
 
@@ -139,7 +138,6 @@ def salvar():
 # =========================
 @app.route("/exportar")
 def exportar():
-
     if not usuario_logado():
         return redirect("/login")
 
