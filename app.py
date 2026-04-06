@@ -13,22 +13,32 @@ ARQUIVO_USUARIOS = "usuarios.csv"
 # =========================
 def carregar_dados():
     caminho = os.path.join(os.path.dirname(__file__), ARQUIVO_DADOS)
+
     if os.path.exists(caminho):
         try:
-            return pd.read_csv(caminho, sep=";").fillna("")
+            df = pd.read_csv(caminho, sep=";").fillna("")
         except:
-            return pd.DataFrame()
-    return pd.DataFrame()
+            df = pd.DataFrame()
+    else:
+        df = pd.DataFrame()
+
+    colunas_obrigatorias = ["usuario", "nome", "sobrenome", "email"]
+
+    for col in colunas_obrigatorias:
+        if col not in df.columns:
+            df[col] = ""
+
+    return df
 
 # =========================
 # 📥 CARREGAR USUÁRIOS
 # =========================
 def carregar_usuarios():
     caminho = os.path.join(os.path.dirname(__file__), ARQUIVO_USUARIOS)
+
     if os.path.exists(caminho):
         df = pd.read_csv(caminho, dtype=str)
 
-        # limpa espaços (evita erro de login)
         df["usuario"] = df["usuario"].str.strip()
         df["senha"] = df["senha"].str.strip()
         df["tipo"] = df["tipo"].str.strip()
@@ -81,7 +91,7 @@ def usuario_logado():
     return "usuario" in session
 
 # =========================
-# 🏠 TELA PRINCIPAL (TUDO JUNTO)
+# 🏠 TELA PRINCIPAL
 # =========================
 @app.route("/", methods=["GET"])
 def formulario():
@@ -91,11 +101,9 @@ def formulario():
     busca = request.args.get("busca", "").strip()
     df = carregar_dados()
 
-    # 🔐 FILTRO POR USUÁRIO
     if not df.empty and session["tipo"] != "admin":
         df = df[df["usuario"] == session["usuario"]]
 
-    # 🔍 BUSCA
     if busca and not df.empty:
         df["nome_completo"] = df["nome"] + " " + df["sobrenome"]
         df = df[df["nome_completo"].str.contains(busca, case=False, na=False)]
@@ -113,6 +121,14 @@ def formulario():
         Nome: <input name="nome" required><br><br>
         Sobrenome: <input name="sobrenome" required><br><br>
         Email: <input name="email" required><br><br>
+
+        <br>
+        <input type="checkbox" name="lgpd" required>
+        <label>
+        Ao preencher esse formulário, declaro que autorizo a TUNIBRA a coletar e utilizar meus dados pessoais exclusivamente para fins de emissão de documentos e serviços relacionados à minha viagem, conforme a LGPD (Lei nº 13.709/2018).
+        </label>
+
+        <br><br>
         <button type="submit">Salvar</button>
     </form>
 
@@ -138,17 +154,23 @@ def salvar():
     if not usuario_logado():
         return redirect("/login")
 
+    # 🔒 VALIDA LGPD
+    if not request.form.get("lgpd"):
+        return "Você precisa aceitar os termos da LGPD"
+
     df = carregar_dados()
 
     novo = {
-        "usuario": session["usuario"],  # 🔐 vinculado ao login
+        "usuario": session["usuario"],
         "nome": request.form.get("nome"),
         "sobrenome": request.form.get("sobrenome"),
         "email": request.form.get("email")
     }
 
     df = pd.concat([df, pd.DataFrame([novo])], ignore_index=True)
-    df.to_csv(ARQUIVO_DADOS, sep=";", index=False)
+
+    caminho = os.path.join(os.path.dirname(__file__), ARQUIVO_DADOS)
+    df.to_csv(caminho, sep=";", index=False)
 
     return redirect("/")
 
@@ -174,7 +196,7 @@ def exportar():
     )
 
 # =========================
-# 🔍 DEBUG (REMOVER DEPOIS)
+# 🔍 DEBUG
 # =========================
 @app.route("/debug")
 def debug():
@@ -182,7 +204,7 @@ def debug():
     return df.to_html()
 
 # =========================
-# 🚀 EXECUÇÃO LOCAL
+# 🚀 EXECUÇÃO
 # =========================
 if __name__ == "__main__":
     app.run(debug=True)
