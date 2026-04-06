@@ -1,321 +1,159 @@
-from flask import Flask, request, redirect, Response
+from flask import Flask, request, redirect, session, url_for, Response
 import pandas as pd
 import os
 
 app = Flask(__name__)
+app.secret_key = "segredo_super_seguro_v2"  # Necessário para sessão
 
-ARQUIVO = "dados.csv"
+ARQUIVO_DADOS = "dados.csv"
+ARQUIVO_USUARIOS = "usuarios.csv"
 
+# =========================
+# 📥 CARREGAR DADOS
+# =========================
 def carregar_dados():
-    caminho = os.path.join(os.path.dirname(__file__), ARQUIVO)
+    caminho = os.path.join(os.path.dirname(__file__), ARQUIVO_DADOS)
     if os.path.exists(caminho):
         try:
-            return pd.read_csv(caminho, sep=';').fillna("")
+            return pd.read_csv(caminho, sep=";").fillna("")
         except:
             return pd.DataFrame()
-    else:
-        return pd.DataFrame()
+    return pd.DataFrame()
 
-def formatar_nome(nome):
-    return " ".join([p.capitalize() for p in nome.split()])
+# =========================
+# 📥 CARREGAR USUÁRIOS
+# =========================
+def carregar_usuarios():
+    caminho = os.path.join(os.path.dirname(__file__), ARQUIVO_USUARIOS)
+    if os.path.exists(caminho):
+        return pd.read_csv(caminho)
+    return pd.DataFrame()
 
+# =========================
+# 🔐 LOGIN
+# =========================
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        usuario = request.form.get("usuario")
+        senha = request.form.get("senha")
 
-@app.route('/')
+        df = carregar_usuarios()
+
+        user = df[(df["usuario"] == usuario) & (df["senha"] == senha)]
+
+        if not user.empty:
+            session["usuario"] = usuario
+            session["tipo"] = user.iloc[0]["tipo"]
+            return redirect("/")
+        else:
+            return "Usuário ou senha inválidos"
+
+    return """
+    <h2>Login</h2>
+    <form method="POST">
+        Usuário: <input name="usuario"><br><br>
+        Senha: <input name="senha" type="password"><br><br>
+        <button type="submit">Entrar</button>
+    </form>
+    """
+
+# =========================
+# 🚪 LOGOUT
+# =========================
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/login")
+
+# =========================
+# 🔒 PROTEÇÃO
+# =========================
+def usuario_logado():
+    return "usuario" in session
+
+# =========================
+# 🏠 TELA PRINCIPAL
+# =========================
+@app.route("/", methods=["GET", "POST"])
 def formulario():
+    if not usuario_logado():
+        return redirect("/login")
 
     busca = request.args.get("busca", "")
-
     df = carregar_dados()
 
-    # 🔎 Busca por nome completo
+    # 🔐 FILTRO POR USUÁRIO
+    if session["tipo"] != "admin":
+        df = df[df["usuario"] == session["usuario"]]
+
+    # 🔍 BUSCA
     if busca and not df.empty:
-        df['nome_completo'] = df['nome'] + ' ' + df['sobrenome']
-        df = df[df['nome_completo'].str.contains(busca, case=False, na=False)]
+        df["nome_completo"] = df["nome"] + " " + df["sobrenome"]
+        df = df[df["nome_completo"].str.contains(busca, case=False, na=False)]
 
-    # 🔄 Ordenar colunas
-    if not df.empty:
-        colunas = list(df.columns)
-        nova_ordem = ['nome', 'sobrenome'] + [c for c in colunas if c not in ['nome', 'sobrenome']]
-        df = df[nova_ordem]
-
-    tabela_html = df.to_html(index=False) if not df.empty else ""
+    tabela = df.to_html(index=False)
 
     return f"""
-<!DOCTYPE html>
-<html>
-<head>
-<title>Cadastro</title>
+    <h2>Bem-vindo, {session['usuario']} ({session['tipo']})</h2>
+    <a href="/logout">Sair</a>
 
-<style>
-body {{ font-family: Arial; background:#f4f4f4; }}
+    <h3>Pesquisa</h3>
+    <form method="GET">
+        <input name="busca" placeholder="Pesquisar">
+        <button>Buscar</button>
+    </form>
 
-.container {{ display:flex; }}
+    <br>
 
-.left {{ width:50%; padding:20px; }}
-.right {{ width:50%; padding:20px; overflow:auto; }}
+    {tabela}
+    """
 
-.section {{
-    background:#1f3a5f;
-    color:white;
-    padding:8px;
-    margin-top:20px;
-    font-weight:bold;
-}}
-
-table {{
-    width:100%;
-    border-collapse: collapse;
-    background:white;
-}}
-
-td, th {{
-    border:1px solid #ccc;
-    padding:6px;
-    font-size:12px;
-}}
-
-th {{
-    background:#1f3a5f;
-    color:white;
-    text-align:left;
-}}
-
-input, select {{
-    width:95%;
-    padding:5px;
-}}
-
-button {{
-    background:#1f3a5f;
-    color:white;
-    padding:8px;
-    border:none;
-    margin-top:5px;
-    cursor:pointer;
-}}
-
-.add-btn {{ background:#28a745; }}
-.delete-btn {{ background:#dc3545; }}
-.clear-btn {{ background:#6c757d; }}
-.export-btn {{ background:#17a2b8; }}
-
-.search-box {{
-    margin-bottom:20px;
-}}
-</style>
-</head>
-
-<body>
-
-<div class="container">
-
-<div class="left">
-
-<form action="/salvar" method="post">
-
-<div class="section">DADOS PESSOAIS</div>
-<table>
-<tr><td>Primeiro Nome*</td><td><input name="nome" required></td></tr>
-<tr><td>Sobrenome*</td><td><input name="sobrenome" required></td></tr>
-<tr><td>Email*</td><td><input name="email" required></td></tr>
-<tr><td>Telefone</td><td><input name="telefone"></td></tr>
-<tr><td>Celular</td><td><input name="celular"></td></tr>
-</table>
-
-<div class="section">DOCUMENTOS</div>
-<table>
-<tr><td>Data Nascimento*</td><td><input type="date" name="data_nasc"></td></tr>
-<tr><td>Nacionalidade*</td><td><input name="nacionalidade"></td></tr>
-<tr><td>2ª Nacionalidade</td><td><input name="nacionalidade2"></td></tr>
-<tr><td>Passaporte*</td><td><input name="passaporte"></td></tr>
-<tr><td>Validade Passaporte</td><td><input type="date" name="validade_passaporte"></td></tr>
-<tr><td>2º Passaporte</td><td><input name="passaporte2"></td></tr>
-<tr><td>Validade 2º Passaporte</td><td><input type="date" name="validade_passaporte2"></td></tr>
-<tr><td>CPF*</td><td><input name="cpf"></td></tr>
-<tr><td>RG*</td><td><input name="rg"></td></tr>
-<tr><td>RNE</td><td><input name="rne"></td></tr>
-<tr><td>Validade RNE</td><td><input type="date" name="validade_rne"></td></tr>
-<tr><td>Estado Civil*</td><td><input name="estado_civil"></td></tr>
-</table>
-
-<div class="section">ENDEREÇO</div>
-<table>
-<tr><td>Endereço*</td><td><input name="endereco"></td></tr>
-<tr><td>Complemento</td><td><input name="complemento"></td></tr>
-<tr><td>Bairro*</td><td><input name="bairro"></td></tr>
-<tr><td>Cidade*</td><td><input name="cidade"></td></tr>
-<tr><td>Estado*</td><td><input name="estado"></td></tr>
-<tr><td>CEP*</td><td><input name="cep"></td></tr>
-</table>
-
-<div class="section">DADOS DA EMPRESA</div>
-<table>
-<tr><td>Empresa*</td><td><input name="empresa"></td></tr>
-<tr><td>Cargo*</td><td><input name="cargo"></td></tr>
-<tr><td>Departamento</td><td><input name="departamento"></td></tr>
-<tr><td>Centro de Custo</td><td><input name="centro_custo"></td></tr>
-</table>
-
-<div class="section">PREFERÊNCIAS</div>
-<table>
-<tr><td>Assento</td><td><input name="assento"></td></tr>
-<tr>
-<td>Fumante</td>
-<td>
-<select name="fumante">
-<option>Não</option>
-<option>Sim</option>
-</select>
-</td>
-</tr>
-</table>
-
-<div class="section">CARTÃO DE MILHAGENS</div>
-
-<table id="milhagem_table">
-<tr>
-<th>Cia Aérea</th>
-<th>Número</th>
-<th>Validade</th>
-<th>Categoria</th>
-<th>Ação</th>
-</tr>
-
-<tr>
-<td><input name="cia_aerea[]"></td>
-<td><input name="numero_milhagem[]"></td>
-<td><input type="date" name="validade_milhagem[]"></td>
-<td><input name="categoria_milhagem[]"></td>
-<td><button type="button" class="delete-btn" onclick="removerLinha(this)">🗑</button></td>
-</tr>
-</table>
-
-<button type="button" class="add-btn" onclick="addLinha()">+ Adicionar</button>
-
-<button type="submit">Salvar</button>
-
-</form>
-</div>
-
-
-<div class="right">
-<h2>Pesquisa</h2>
-
-<form method="get" class="search-box">
-<input type="text" id="busca" name="busca" placeholder="Pesquisar por nome completo" value="{busca}">
-
-<button type="submit">Buscar</button>
-
-<button type="button" class="clear-btn" onclick="limparBusca()">Limpar</button>
-
-<a href="/exportar?busca={busca}">
-<button type="button" class="export-btn">Exportar CSV</button>
-</a>
-
-</form>
-
-{tabela_html}
-
-</div>
-
-</div>
-
-<script>
-function addLinha() {{
-    let table = document.getElementById("milhagem_table");
-    let row = table.insertRow();
-
-    row.innerHTML = `
-    <td><input name="cia_aerea[]"></td>
-    <td><input name="numero_milhagem[]"></td>
-    <td><input type="date" name="validade_milhagem[]"></td>
-    <td><input name="categoria_milhagem[]"></td>
-    <td><button type="button" class="delete-btn" onclick="removerLinha(this)">🗑</button></td>
-    `;
-}}
-
-function removerLinha(botao) {{
-    let row = botao.parentNode.parentNode;
-    let table = document.getElementById("milhagem_table");
-
-    if (table.rows.length > 2) {{
-        row.remove();
-    }} else {{
-        alert("É necessário manter pelo menos uma linha.");
-    }}
-}}
-
-function limparBusca() {{
-    document.getElementById("busca").value = "";
-    window.location.href = "/";
-}}
-</script>
-
-</body>
-</html>
-"""
-
-
-@app.route('/salvar', methods=['POST'])
+# =========================
+# 💾 SALVAR DADOS
+# =========================
+@app.route("/salvar", methods=["POST"])
 def salvar():
-
-    dados = request.form.to_dict(flat=False)
-
-    if 'nome' in dados:
-        dados['nome'] = formatar_nome(dados['nome'][0])
-
-    if 'sobrenome' in dados:
-        dados['sobrenome'] = formatar_nome(dados['sobrenome'][0])
-
-    milhagens = []
-
-    for i in range(len(dados.get('cia_aerea[]', []))):
-        linha = f"{dados['cia_aerea[]'][i]} | {dados['numero_milhagem[]'][i]} | {dados['validade_milhagem[]'][i]} | {dados['categoria_milhagem[]'][i]}"
-        milhagens.append(linha)
-
-    dados['milhagens'] = " || ".join(milhagens)
-
-    dados.pop('cia_aerea[]', None)
-    dados.pop('numero_milhagem[]', None)
-    dados.pop('validade_milhagem[]', None)
-    dados.pop('categoria_milhagem[]', None)
-
-    dados = {k: v[0] if isinstance(v, list) else v for k, v in dados.items()}
-
-    caminho = os.path.join(os.path.dirname(__file__), ARQUIVO)
-
-    df = pd.DataFrame([dados])
-
-    if os.path.exists(caminho):
-        df.to_csv(caminho, mode='a', header=False, index=False, sep=';')
-    else:
-        df.to_csv(caminho, index=False, sep=';')
-
-    return redirect('/')
-
-
-@app.route('/exportar')
-def exportar():
-
-    busca = request.args.get("busca", "")
+    if not usuario_logado():
+        return redirect("/login")
 
     df = carregar_dados()
 
-    if busca and not df.empty:
-        df['nome_completo'] = df['nome'] + ' ' + df['sobrenome']
-        df = df[df['nome_completo'].str.contains(busca, case=False, na=False)]
+    novo = {
+        "usuario": session["usuario"],  # 🔐 vincula ao usuário logado
+        "nome": request.form.get("nome"),
+        "sobrenome": request.form.get("sobrenome"),
+        "email": request.form.get("email")
+    }
 
-    if df.empty:
-        return "Sem dados para exportar"
+    df = pd.concat([df, pd.DataFrame([novo])], ignore_index=True)
+    df.to_csv(ARQUIVO_DADOS, sep=";", index=False)
 
-    csv = df.to_csv(index=False, sep=';')
+    return redirect("/")
+    
+# =========================
+# 📤 EXPORTAR CSV
+# =========================
+@app.route("/exportar")
+def exportar():
+    if not usuario_logado():
+        return redirect("/login")
+
+    df = carregar_dados()
+
+    if session["tipo"] != "admin":
+        df = df[df["usuario"] == session["usuario"]]
+
+    csv = df.to_csv(index=False)
 
     return Response(
         csv,
         mimetype="text/csv",
-        headers={"Content-Disposition": "attachment;filename=dados_exportados.csv"}
+        headers={"Content-Disposition": "attachment;filename=dados.csv"}
     )
 
-
-if __name__ == '__main__':
+# =========================
+# 🚀 EXECUÇÃO LOCAL
+# =========================
+if __name__ == "__main__":
     app.run(debug=True)
