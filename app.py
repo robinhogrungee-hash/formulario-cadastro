@@ -21,14 +21,14 @@ def carregar_dados():
     return pd.DataFrame()
 
 # =========================
-# 📥 CARREGAR USUÁRIOS (ROBUSTO)
+# 📥 CARREGAR USUÁRIOS
 # =========================
 def carregar_usuarios():
     caminho = os.path.join(os.path.dirname(__file__), ARQUIVO_USUARIOS)
     if os.path.exists(caminho):
         df = pd.read_csv(caminho, dtype=str)
 
-        # 🔥 LIMPA ESPAÇOS (principal causa de erro)
+        # limpa espaços (evita erro de login)
         df["usuario"] = df["usuario"].str.strip()
         df["senha"] = df["senha"].str.strip()
         df["tipo"] = df["tipo"].str.strip()
@@ -47,9 +47,6 @@ def login():
         senha = request.form.get("senha", "").strip()
 
         df = carregar_usuarios()
-
-        if df.empty:
-            return "Erro: usuários não encontrados"
 
         user = df[(df["usuario"] == usuario) & (df["senha"] == senha)]
 
@@ -84,7 +81,7 @@ def usuario_logado():
     return "usuario" in session
 
 # =========================
-# 🏠 TELA PRINCIPAL
+# 🏠 TELA PRINCIPAL (TUDO JUNTO)
 # =========================
 @app.route("/", methods=["GET"])
 def formulario():
@@ -103,19 +100,33 @@ def formulario():
         df["nome_completo"] = df["nome"] + " " + df["sobrenome"]
         df = df[df["nome_completo"].str.contains(busca, case=False, na=False)]
 
-    tabela = df.to_html(index=False) if not df.empty else "<p>Sem dados</p>"
+    tabela = df.to_html(index=False) if not df.empty else "<p>Sem registros</p>"
 
     return f"""
     <h2>Bem-vindo, {session['usuario']} ({session['tipo']})</h2>
     <a href="/logout">Sair</a>
 
-    <h3>Pesquisa</h3>
+    <hr>
+
+    <h3>📋 Cadastro</h3>
+    <form method="POST" action="/salvar">
+        Nome: <input name="nome" required><br><br>
+        Sobrenome: <input name="sobrenome" required><br><br>
+        Email: <input name="email" required><br><br>
+        <button type="submit">Salvar</button>
+    </form>
+
+    <hr>
+
+    <h3>🔍 Pesquisa</h3>
     <form method="GET">
         <input name="busca" placeholder="Pesquisar por nome">
         <button>Buscar</button>
     </form>
 
     <br>
+
+    <h3>📊 Registros</h3>
     {tabela}
     """
 
@@ -130,7 +141,7 @@ def salvar():
     df = carregar_dados()
 
     novo = {
-        "usuario": session["usuario"],
+        "usuario": session["usuario"],  # 🔐 vinculado ao login
         "nome": request.form.get("nome"),
         "sobrenome": request.form.get("sobrenome"),
         "email": request.form.get("email")
