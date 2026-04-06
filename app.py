@@ -1,6 +1,7 @@
 from flask import Flask, request, redirect, Response
 import pandas as pd
 import os
+from datetime import datetime  # Para registrar data do consentimento
 
 app = Flask(__name__)
 
@@ -192,11 +193,20 @@ button {{
 
 <button type="button" class="add-btn" onclick="addLinha()">+ Adicionar</button>
 
+<!-- ==========================
+     LGPD (ADICIONADO)
+========================== -->
+<div style="margin-top:20px; text-align:left;">
+<input type="checkbox" name="lgpd" required>
+<label style="font-size:12px;">
+*Ao preencher esse formulário, declaro que autorizo a TUNIBRA a coletar e utilizar meus dados pessoais exclusivamente para fins de emissão de documentos e serviços relacionados à minha viagem, conforme a LGPD (Lei nº 13.709/2018).
+</label>
+</div>
+
 <button type="submit">Salvar</button>
 
 </form>
 </div>
-
 
 <div class="right">
 <h2>Pesquisa</h2>
@@ -261,6 +271,10 @@ def salvar():
 
     dados = request.form.to_dict(flat=False)
 
+    # 🔐 VALIDAÇÃO LGPD (ADICIONADO)
+    if 'lgpd' not in dados:
+        return "É obrigatório aceitar os termos da LGPD"
+
     if 'nome' in dados:
         dados['nome'] = formatar_nome(dados['nome'][0])
 
@@ -279,6 +293,10 @@ def salvar():
     dados.pop('numero_milhagem[]', None)
     dados.pop('validade_milhagem[]', None)
     dados.pop('categoria_milhagem[]', None)
+
+    # REGISTRO LGPD (ADICIONADO)
+    dados['lgpd'] = "SIM"
+    dados['data_consentimento'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     dados = {k: v[0] if isinstance(v, list) else v for k, v in dados.items()}
 
