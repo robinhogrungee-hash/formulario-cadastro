@@ -1,179 +1,261 @@
-from flask import Flask, request, redirect, session
+# ==============================
+# IMPORTAÇÕES
+# ==============================
+
+from flask import Flask, request, redirect, Response
 import pandas as pd
 import os
+from datetime import datetime  # Para registrar data do consentimento
+
+
+# ==============================
+# CONFIGURAÇÃO DA APLICAÇÃO
+# ==============================
 
 app = Flask(__name__)
-app.secret_key = "segredo_super_seguro"
 
-ARQUIVO_DADOS = "dados.csv"
-ARQUIVO_USUARIOS = "usuarios.csv"
+# Nome do arquivo CSV (nosso "banco de dados")
+ARQUIVO = "dados.csv"
 
-# =========================
-# 📥 CARREGAR DADOS
-# =========================
+
+# ==============================
+# FUNÇÃO: CARREGAR DADOS
+# ==============================
 def carregar_dados():
-    caminho = os.path.join(os.path.dirname(__file__), ARQUIVO_DADOS)
+    caminho = os.path.join(os.path.dirname(__file__), ARQUIVO)
 
     if os.path.exists(caminho):
-        df = pd.read_csv(caminho, sep=";").fillna("")
+        try:
+            return pd.read_csv(caminho, sep=';').fillna("")
+        except:
+            return pd.DataFrame()
     else:
-        df = pd.DataFrame()
+        return pd.DataFrame()
 
-    if "usuario" not in df.columns:
-        df["usuario"] = ""
 
-    return df
+# ==============================
+# FUNÇÃO: FORMATAR NOME
+# ==============================
+def formatar_nome(nome):
+    return " ".join([p.capitalize() for p in nome.split()])
 
-# =========================
-# 📥 USUÁRIOS
-# =========================
-def carregar_usuarios():
-    caminho = os.path.join(os.path.dirname(__file__), ARQUIVO_USUARIOS)
+
+# ==============================
+# ROTA PRINCIPAL (FORMULÁRIO)
+# ==============================
+@app.route('/')
+def formulario():
+
+    busca = request.args.get("busca", "")
+    df = carregar_dados()
+
+    # ==========================
+    # FILTRO DE BUSCA
+    # ==========================
+    if busca and not df.empty:
+        df['nome_completo'] = df['nome'] + ' ' + df['sobrenome']
+        df = df[df['nome_completo'].str.contains(busca, case=False, na=False)]
+
+    # ==========================
+    # ORGANIZAÇÃO DAS COLUNAS
+    # ==========================
+    if not df.empty:
+        colunas = list(df.columns)
+        nova_ordem = ['nome', 'sobrenome'] + [c for c in colunas if c not in ['nome', 'sobrenome']]
+        df = df[nova_ordem]
+
+    tabela_html = df.to_html(index=False) if not df.empty else ""
+
+    # ==========================
+    # HTML DA PÁGINA
+    # ==========================
+    return f"""
+<!DOCTYPE html>
+<html>
+<head>
+<title>Cadastro com LGPD</title>
+
+<style>
+body {{ font-family: Arial; background:#f4f4f4; }}
+.container {{ display:flex; }}
+.left {{ width:50%; padding:20px; }}
+.right {{ width:50%; padding:20px; overflow:auto; }}
+
+.section {{
+    background:#1f3a5f;
+    color:white;
+    padding:8px;
+    margin-top:20px;
+    font-weight:bold;
+}}
+
+table {{
+    width:100%;
+    border-collapse: collapse;
+    background:white;
+}}
+
+td, th {{
+    border:1px solid #ccc;
+    padding:6px;
+    font-size:12px;
+}}
+
+th {{
+    background:#1f3a5f;
+    color:white;
+}}
+
+input {{
+    width:95%;
+    padding:5px;
+}}
+
+button {{
+    background:#1f3a5f;
+    color:white;
+    padding:8px;
+    border:none;
+    margin-top:5px;
+    cursor:pointer;
+}}
+
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<!-- FORMULÁRIO -->
+<div class="left">
+
+<form action="/salvar" method="post">
+
+<div class="section">DADOS PESSOAIS</div>
+<table>
+<tr><td>Nome*</td><td><input name="nome" required></td></tr>
+<tr><td>Sobrenome*</td><td><input name="sobrenome" required></td></tr>
+<tr><td>Email*</td><td><input name="email" required></td></tr>
+</table>
+
+<!-- ==========================
+     LGPD
+========================== -->
+<div class="section">LGPD</div>
+<table>
+<tr>
+<td colspan="2">
+<label>
+<input type="checkbox" name="lgpd" required>
+Declaro que li e concordo com o uso dos meus dados para fins de cadastro conforme a LGPD.
+</label>
+</td>
+</tr>
+</table>
+
+<button type="submit">Salvar</button>
+
+</form>
+</div>
+
+
+<!-- LISTAGEM -->
+<div class="right">
+<h2>Pesquisa</h2>
+
+<form method="get">
+<input type="text" name="busca" placeholder="Pesquisar por nome completo" value="{busca}">
+<button type="submit">Buscar</button>
+<a href="/exportar?busca={busca}">
+<button type="button">Exportar CSV</button>
+</a>
+</form>
+
+{tabela_html}
+
+</div>
+
+</div>
+
+</body>
+</html>
+"""
+
+
+# ==============================
+# ROTA: SALVAR DADOS
+# ==============================
+@app.route('/salvar', methods=['POST'])
+def salvar():
+
+    dados = request.form.to_dict(flat=False)
+
+    # ==========================
+    # VALIDAÇÃO LGPD
+    # ==========================
+    if 'lgpd' not in dados:
+        return "Você precisa aceitar os termos da LGPD"
+
+    # ==========================
+    # FORMATAR NOME
+    # ==========================
+    if 'nome' in dados:
+        dados['nome'] = formatar_nome(dados['nome'][0])
+
+    if 'sobrenome' in dados:
+        dados['sobrenome'] = formatar_nome(dados['sobrenome'][0])
+
+    # ==========================
+    # REGISTRO LGPD
+    # ==========================
+    dados['lgpd'] = "SIM"
+    dados['data_consentimento'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # ==========================
+    # NORMALIZA DADOS
+    # ==========================
+    dados = {k: v[0] if isinstance(v, list) else v for k, v in dados.items()}
+
+    caminho = os.path.join(os.path.dirname(__file__), ARQUIVO)
+
+    df = pd.DataFrame([dados])
 
     if os.path.exists(caminho):
-        df = pd.read_csv(caminho, dtype=str)
-        df = df.apply(lambda x: x.str.strip())
-        return df
+        df.to_csv(caminho, mode='a', header=False, index=False, sep=';')
+    else:
+        df.to_csv(caminho, index=False, sep=';')
 
-    return pd.DataFrame()
+    return redirect('/')
 
-# =========================
-# 🔐 LOGIN
-# =========================
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "POST":
-        usuario = request.form.get("usuario", "").strip()
-        senha = request.form.get("senha", "").strip()
 
-        df = carregar_usuarios()
+# ==============================
+# ROTA: EXPORTAR CSV
+# ==============================
+@app.route('/exportar')
+def exportar():
 
-        user = df[(df["usuario"] == usuario) & (df["senha"] == senha)]
-
-        if not user.empty:
-            session["usuario"] = usuario
-            session["tipo"] = user.iloc[0]["tipo"]
-            return redirect("/")
-        else:
-            return "Usuário ou senha inválidos"
-
-    return """
-    <h2>Login</h2>
-    <form method="POST">
-        Usuário: <input name="usuario"><br><br>
-        Senha: <input name="senha" type="password"><br><br>
-        <button>Entrar</button>
-    </form>
-    """
-
-# =========================
-# LOGOUT
-# =========================
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect("/login")
-
-def usuario_logado():
-    return "usuario" in session
-
-# =========================
-# TELA PRINCIPAL (FORMULÁRIO ORIGINAL)
-# =========================
-@app.route("/", methods=["GET"])
-def home():
-    if not usuario_logado():
-        return redirect("/login")
-
+    busca = request.args.get("busca", "")
     df = carregar_dados()
 
-    if session["tipo"] != "admin":
-        df = df[df["usuario"] == session["usuario"]]
+    if busca and not df.empty:
+        df['nome_completo'] = df['nome'] + ' ' + df['sobrenome']
+        df = df[df['nome_completo'].str.contains(busca, case=False, na=False)]
 
-    tabela = df.to_html(index=False) if not df.empty else "Sem registros"
+    if df.empty:
+        return "Sem dados para exportar"
 
-    return f"""
-    <h2>Bem-vindo, {session['usuario']} ({session['tipo']})</h2>
-    <a href="/logout">Sair</a>
+    csv = df.to_csv(index=False, sep=';')
 
-    <hr>
+    return Response(
+        csv,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment;filename=dados_exportados.csv"}
+    )
 
-    <h2>DADOS PESSOAIS</h2>
-    <form method="POST" action="/salvar">
-        Nome: <input name="nome"><br>
-        Sobrenome: <input name="sobrenome"><br>
-        Email: <input name="email"><br>
-        Telefone: <input name="telefone"><br>
-        Celular: <input name="celular"><br>
 
-        <h3>DOCUMENTOS</h3>
-        Data Nascimento: <input name="data_nasc"><br>
-        Nacionalidade: <input name="nacionalidade"><br>
-        CPF: <input name="cpf"><br>
-        RG: <input name="rg"><br>
-
-        <br>
-        <input type="checkbox" name="lgpd" required>
-        Ao preencher esse formulário, declaro que autorizo a TUNIBRA a coletar e utilizar meus dados pessoais conforme a LGPD.
-
-        <br><br>
-        <button type="submit">Salvar</button>
-    </form>
-
-    <hr>
-
-    <h2>Pesquisa</h2>
-    <form method="GET">
-        <input name="busca">
-        <button>Buscar</button>
-    </form>
-
-    <h2>Registros</h2>
-    {tabela}
-    """
-
-# =========================
-# SALVAR
-# =========================
-@app.route("/salvar", methods=["POST"])
-def salvar():
-    if not usuario_logado():
-        return redirect("/login")
-
-    if not request.form.get("lgpd"):
-        return "Aceite LGPD obrigatório"
-
-    df = carregar_dados()
-
-    novo = {
-        "usuario": session["usuario"],
-        "nome": request.form.get("nome"),
-        "sobrenome": request.form.get("sobrenome"),
-        "email": request.form.get("email"),
-        "telefone": request.form.get("telefone"),
-        "celular": request.form.get("celular"),
-        "data_nasc": request.form.get("data_nasc"),
-        "nacionalidade": request.form.get("nacionalidade"),
-        "cpf": request.form.get("cpf"),
-        "rg": request.form.get("rg"),
-    }
-
-    df = pd.concat([df, pd.DataFrame([novo])], ignore_index=True)
-
-    caminho = os.path.join(os.path.dirname(__file__), ARQUIVO_DADOS)
-    df.to_csv(caminho, sep=";", index=False)
-
-    return redirect("/")
-
-# =========================
-# DEBUG
-# =========================
-@app.route("/debug")
-def debug():
-    return carregar_usuarios().to_html()
-
-# =========================
-# RUN
-# =========================
-if __name__ == "__main__":
+# ==============================
+# INICIAR SERVIDOR
+# ==============================
+if __name__ == '__main__':
     app.run(debug=True)
