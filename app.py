@@ -206,12 +206,12 @@ function buscarCEP() {{
 
 
 # ==============================
-# 🔥 ROTA CORRIGIDA
+# 🔥 CORREÇÃO AQUI (ÚNICA ALTERAÇÃO)
 # ==============================
 @app.route('/salvar', methods=['GET', 'POST'])
 def salvar():
 
-    # 🔒 evita erro 404 ao acessar direto
+    # 🔒 evita erro ao acessar direto /salvar
     if request.method == 'GET':
         return redirect('/')
 
@@ -220,9 +220,11 @@ def salvar():
     if 'lgpd' not in dados:
         return "Aceite a LGPD"
 
+    # formatar nomes
     dados['nome'] = formatar_nome(dados.get('nome', [''])[0])
     dados['sobrenome'] = formatar_nome(dados.get('sobrenome', [''])[0])
 
+    # tratar milhagens
     milhagens = []
     for i in range(len(dados.get('cia_aerea[]', []))):
         linha = f"{dados['cia_aerea[]'][i]} | {dados['numero_milhagem[]'][i]}"
@@ -230,13 +232,16 @@ def salvar():
 
     dados['milhagens'] = " || ".join(milhagens)
 
+    # remover campos
     dados.pop('cia_aerea[]', None)
     dados.pop('numero_milhagem[]', None)
     dados.pop('validade_milhagem[]', None)
 
+    # LGPD
     dados['lgpd'] = "SIM"
     dados['data_consentimento'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    # normalizar
     dados = {k: v[0] if isinstance(v, list) else v for k, v in dados.items()}
 
     caminho = os.path.join(os.path.dirname(__file__), ARQUIVO)
