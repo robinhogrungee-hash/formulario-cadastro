@@ -5,7 +5,7 @@ from datetime import datetime  # Para registrar data do consentimento
 
 app = Flask(__name__)
 
-ARQUIVO = "dados_v2.csv"
+ARQUIVO = "dados.csv"
 
 if not os.path.exists(os.path.join(os.path.dirname(__file__), ARQUIVO)):
     pd.DataFrame().to_csv(
