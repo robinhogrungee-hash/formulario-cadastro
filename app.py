@@ -5,7 +5,14 @@ from datetime import datetime  # Para registrar data do consentimento
 
 app = Flask(__name__)
 
-ARQUIVO = "dados.csv"
+ARQUIVO = "dados_v2.csv"
+
+if not os.path.exists(os.path.join(os.path.dirname(__file__), ARQUIVO)):
+    pd.DataFrame().to_csv(
+        os.path.join(os.path.dirname(__file__), ARQUIVO),
+        index=False,
+        sep=';'
+    )
 
 def carregar_dados():
     caminho = os.path.join(os.path.dirname(__file__), ARQUIVO)
@@ -324,6 +331,23 @@ def salvar():
 
     return redirect('/')
 
+@app.route('/exportar')
+def exportar():
+
+    caminho = os.path.join(os.path.dirname(__file__), ARQUIVO)
+
+    if not os.path.exists(caminho):
+        return "Arquivo CSV ainda não foi criado."
+
+    df = pd.read_csv(caminho, sep=';').fillna("")
+
+    csv = df.to_csv(index=False, sep=';')
+
+    return Response(
+        csv,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment;filename=dados.csv"}
+    )
 
 if __name__ == '__main__':
     app.run(debug=True)
