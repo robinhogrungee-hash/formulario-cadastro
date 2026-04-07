@@ -5,7 +5,7 @@ from datetime import datetime  # Para registrar data do consentimento
 
 app = Flask(__name__)
 
-ARQUIVO = "dados_teste.csv"
+ARQUIVO = "dados.csv"
 
 def carregar_dados():
     caminho = os.path.join(os.path.dirname(__file__), ARQUIVO)
