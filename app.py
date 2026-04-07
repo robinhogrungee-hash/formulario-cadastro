@@ -1,7 +1,7 @@
 from flask import Flask, request, redirect, Response
 import pandas as pd
 import os
-from datetime import datetime  # Para registrar data do consentimento
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -25,15 +25,12 @@ def formatar_nome(nome):
 def formulario():
 
     busca = request.args.get("busca", "")
-
     df = carregar_dados()
 
-    # 🔎 Busca por nome completo
     if busca and not df.empty:
         df['nome_completo'] = df['nome'] + ' ' + df['sobrenome']
         df = df[df['nome_completo'].str.contains(busca, case=False, na=False)]
 
-    # 🔄 Ordenar colunas
     if not df.empty:
         colunas = list(df.columns)
         nova_ordem = ['nome', 'sobrenome'] + [c for c in colunas if c not in ['nome', 'sobrenome']]
@@ -81,9 +78,17 @@ th {{
     text-align:left;
 }}
 
-input, select {{
+/* 🔥 CORREÇÃO AQUI */
+input[type="text"],
+input[type="date"],
+input[type="email"],
+select {{
     width:95%;
     padding:5px;
+}}
+
+input[type="checkbox"] {{
+    width:auto;
 }}
 
 button {{
@@ -193,14 +198,12 @@ button {{
 
 <button type="button" class="add-btn" onclick="addLinha()">+ Adicionar</button>
 
-<!-- ==========================
-     LGPD (ADICIONADO)
-========================== -->
-<div style="margin-top:20px; text-align:left;">
-<input type="checkbox" name="lgpd" required>
-<label style="font-size:12px;">
-*Ao preencher esse formulário, declaro que autorizo a TUNIBRA a coletar e utilizar meus dados pessoais exclusivamente para fins de emissão de documentos e serviços relacionados à minha viagem, conforme a LGPD (Lei nº 13.709/2018).
-</label>
+<!-- LGPD CORRIGIDA DEFINITIVA -->
+<div style="margin-top:20px;">
+    <label style="font-size:12px; line-height:1.4;">
+        <input type="checkbox" name="lgpd" required style="width:auto; margin-right:5px;">
+        *Ao preencher esse formulário, declaro que autorizo a TUNIBRA a coletar e utilizar meus dados pessoais exclusivamente para fins de emissão de documentos e serviços relacionados à minha viagem, conforme a LGPD (Lei nº 13.709/2018).
+    </label>
 </div>
 
 <button type="submit">Salvar</button>
@@ -213,15 +216,12 @@ button {{
 
 <form method="get" class="search-box">
 <input type="text" id="busca" name="busca" placeholder="Pesquisar por nome completo" value="{busca}">
-
 <button type="submit">Buscar</button>
-
 <button type="button" class="clear-btn" onclick="limparBusca()">Limpar</button>
 
 <a href="/exportar?busca={busca}">
 <button type="button" class="export-btn">Exportar CSV</button>
 </a>
-
 </form>
 
 {tabela_html}
@@ -264,76 +264,3 @@ function limparBusca() {{
 </body>
 </html>
 """
-
-
-@app.route('/salvar', methods=['POST'])
-def salvar():
-
-    dados = request.form.to_dict(flat=False)
-
-    # 🔐 VALIDAÇÃO LGPD (ADICIONADO)
-    if 'lgpd' not in dados:
-        return "É obrigatório aceitar os termos da LGPD"
-
-    if 'nome' in dados:
-        dados['nome'] = formatar_nome(dados['nome'][0])
-
-    if 'sobrenome' in dados:
-        dados['sobrenome'] = formatar_nome(dados['sobrenome'][0])
-
-    milhagens = []
-
-    for i in range(len(dados.get('cia_aerea[]', []))):
-        linha = f"{dados['cia_aerea[]'][i]} | {dados['numero_milhagem[]'][i]} | {dados['validade_milhagem[]'][i]} | {dados['categoria_milhagem[]'][i]}"
-        milhagens.append(linha)
-
-    dados['milhagens'] = " || ".join(milhagens)
-
-    dados.pop('cia_aerea[]', None)
-    dados.pop('numero_milhagem[]', None)
-    dados.pop('validade_milhagem[]', None)
-    dados.pop('categoria_milhagem[]', None)
-
-    # REGISTRO LGPD (ADICIONADO)
-    dados['lgpd'] = "SIM"
-    dados['data_consentimento'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    dados = {k: v[0] if isinstance(v, list) else v for k, v in dados.items()}
-
-    caminho = os.path.join(os.path.dirname(__file__), ARQUIVO)
-
-    df = pd.DataFrame([dados])
-
-    if os.path.exists(caminho):
-        df.to_csv(caminho, mode='a', header=False, index=False, sep=';')
-    else:
-        df.to_csv(caminho, index=False, sep=';')
-
-    return redirect('/')
-
-
-@app.route('/exportar')
-def exportar():
-
-    busca = request.args.get("busca", "")
-
-    df = carregar_dados()
-
-    if busca and not df.empty:
-        df['nome_completo'] = df['nome'] + ' ' + df['sobrenome']
-        df = df[df['nome_completo'].str.contains(busca, case=False, na=False)]
-
-    if df.empty:
-        return "Sem dados para exportar"
-
-    csv = df.to_csv(index=False, sep=';')
-
-    return Response(
-        csv,
-        mimetype="text/csv",
-        headers={"Content-Disposition": "attachment;filename=dados_exportados.csv"}
-    )
-
-
-if __name__ == '__main__':
-    app.run(debug=True)
