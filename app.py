@@ -303,6 +303,8 @@ def salvar():
 
     dados = {k: v[0] if isinstance(v, list) else v for k, v in dados.items()}
 
+    print("SALVANDO DADOS:", dados) #  
+
     caminho = os.path.join(os.path.dirname(__file__), ARQUIVO)
     df = pd.DataFrame([dados])
 
