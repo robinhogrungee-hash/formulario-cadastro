@@ -307,6 +307,7 @@ def salvar():
     caminho = os.path.join(os.path.dirname(__file__), ARQUIVO)
 
     print("CAMINHO DO CSV:", caminho) #
+    print("EXISTE?", os.path.exists(caminho))
     print("DADOS QUE ESTAO SENDO SALVOS:", dados) # 
     
     df = pd.DataFrame([dados])
