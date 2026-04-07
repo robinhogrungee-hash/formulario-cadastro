@@ -5,7 +5,7 @@ from datetime import datetime  # Para registrar data do consentimento
 
 app = Flask(__name__)
 
-ARQUIVO = "dados.csv"
+ARQUIVO = "dados_teste.csv"
 
 def carregar_dados():
     caminho = os.path.join(os.path.dirname(__file__), ARQUIVO)
@@ -104,7 +104,7 @@ button {{
 }}
 
 .add-btn {{ background:#28a745; }}
-.delete-btn {{ background:#dc3545; }}
+delete-btn {{ background:#dc3545; }}
 .clear-btn {{ background:#6c757d; }}
 .export-btn {{ background:#17a2b8; }}
 
@@ -201,7 +201,6 @@ button {{
 
 <button type="button" class="add-btn" onclick="addLinha()">+ Adicionar</button>
 
-<!-- LGPD -->
 <div style="margin-top:20px;">
     <label for="lgpd" style="font-size:12px; line-height:1.4; display:block;">
         <input type="checkbox" name="lgpd" id="lgpd" required style="margin-right:6px;">
@@ -269,9 +268,6 @@ function limparBusca() {{
 </html>
 """
 
-# ==============================
-# 🔥 ROTA QUE FALTAVA (ADICIONADA)
-# ==============================
 @app.route('/salvar', methods=['GET', 'POST'])
 def salvar():
 
@@ -303,17 +299,26 @@ def salvar():
 
     dados = {k: v[0] if isinstance(v, list) else v for k, v in dados.items()}
 
-        
     caminho = os.path.join(os.path.dirname(__file__), ARQUIVO)
 
-    print("CAMINHO DO CSV:", caminho) #
+    print("CAMINHO DO CSV:", caminho)
     print("EXISTE?", os.path.exists(caminho))
-    print("DADOS QUE ESTAO SENDO SALVOS:", dados) # 
-    
+    print("DADOS QUE ESTAO SENDO SALVOS:", dados)
+
     df = pd.DataFrame([dados])
-    
+
+    # 🔥 CORREÇÃO AQUI
     if os.path.exists(caminho):
-        df.to_csv(caminho, mode='a', header=False, index=False, sep=';')
+
+        try:
+            df_existente = pd.read_csv(caminho, sep=';').fillna("")
+        except:
+            df_existente = pd.DataFrame()
+
+        df_final = pd.concat([df_existente, df], ignore_index=True, sort=False)
+
+        df_final.to_csv(caminho, index=False, sep=';')
+
     else:
         df.to_csv(caminho, index=False, sep=';')
 
