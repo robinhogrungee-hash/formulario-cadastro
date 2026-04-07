@@ -81,7 +81,6 @@ th {{
     text-align:left;
 }}
 
-/* 🔥 CORREÇÃO DO CSS */
 input[type="text"],
 input[type="date"],
 input[type="email"],
@@ -202,7 +201,7 @@ button {{
 
 <button type="button" class="add-btn" onclick="addLinha()">+ Adicionar</button>
 
-<!-- LGPD CORRIGIDA -->
+<!-- LGPD -->
 <div style="margin-top:20px;">
     <label for="lgpd" style="font-size:12px; line-height:1.4; display:block;">
         <input type="checkbox" name="lgpd" id="lgpd" required style="margin-right:6px;">
@@ -269,3 +268,51 @@ function limparBusca() {{
 </body>
 </html>
 """
+
+# ==============================
+# 🔥 ROTA QUE FALTAVA (ADICIONADA)
+# ==============================
+@app.route('/salvar', methods=['GET', 'POST'])
+def salvar():
+
+    if request.method == 'GET':
+        return redirect('/')
+
+    dados = request.form.to_dict(flat=False)
+
+    if 'lgpd' not in dados:
+        return "É obrigatório aceitar a LGPD"
+
+    dados['nome'] = formatar_nome(dados.get('nome', [''])[0])
+    dados['sobrenome'] = formatar_nome(dados.get('sobrenome', [''])[0])
+
+    milhagens = []
+    for i in range(len(dados.get('cia_aerea[]', []))):
+        linha = f"{dados['cia_aerea[]'][i]} | {dados['numero_milhagem[]'][i]} | {dados['validade_milhagem[]'][i]} | {dados['categoria_milhagem[]'][i]}"
+        milhagens.append(linha)
+
+    dados['milhagens'] = " || ".join(milhagens)
+
+    dados.pop('cia_aerea[]', None)
+    dados.pop('numero_milhagem[]', None)
+    dados.pop('validade_milhagem[]', None)
+    dados.pop('categoria_milhagem[]', None)
+
+    dados['lgpd'] = "SIM"
+    dados['data_consentimento'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    dados = {k: v[0] if isinstance(v, list) else v for k, v in dados.items()}
+
+    caminho = os.path.join(os.path.dirname(__file__), ARQUIVO)
+    df = pd.DataFrame([dados])
+
+    if os.path.exists(caminho):
+        df.to_csv(caminho, mode='a', header=False, index=False, sep=';')
+    else:
+        df.to_csv(caminho, index=False, sep=';')
+
+    return redirect('/')
+
+
+if __name__ == '__main__':
+    app.run(debug=True)
