@@ -303,11 +303,14 @@ def salvar():
 
     dados = {k: v[0] if isinstance(v, list) else v for k, v in dados.items()}
 
-    print("SALVANDO DADOS:", dados) #  
-
+        
     caminho = os.path.join(os.path.dirname(__file__), ARQUIVO)
-    df = pd.DataFrame([dados])
 
+    print("CAMINHO DO CSV:", caminho) #
+    print("DADOS QUE ESTAO SENDO SALVOS:", dados) # 
+    
+    df = pd.DataFrame([dados])
+    
     if os.path.exists(caminho):
         df.to_csv(caminho, mode='a', header=False, index=False, sep=';')
     else:
